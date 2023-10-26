@@ -1,5 +1,6 @@
 import os
 import torch
+from torch import nn
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 from sklearn.cluster import KMeans
@@ -7,9 +8,53 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import timm
+import pandas as pd
+import random
+
+def get_train_test(root, csvpath, test_split=.1):
+    df = pd.read_csv(csvpath)
+    files = list(df['file'])
+    random.shuffle(files)
+    files.remove('file')
+    test_size = int(len(files) * test_split)
+    
+    train_files = files[test_size:]
+    test_files = files[:test_size]
+
+    train_dataset = ZillowSupervised(root, train_files, csvpath)
+    test_dataset = ZillowSupervised(root, test_files, csvpath)
+    return train_dataset, test_dataset
 
 
-class Zillow(Dataset):
+class ZillowSupervised(Dataset):
+    def __init__(self, root, files, csvpath, img_dim=224):
+        preprocess = T.Compose([
+            T.Resize(img_dim),
+            T.CenterCrop(img_dim),
+            T.ToTensor(),
+            T.Normalize((.5, .5, .5), (.5, .5, .5))
+        ])
+
+        self.df = pd.read_csv(csvpath)
+        self.imgs = []
+        self.files = files
+        for file in self.files:
+            img = Image.open(os.path.join(root, file)).convert("RGB")
+            img = preprocess(img)
+            self.imgs.append(img)
+    
+    def __len__(self):
+        return len(self.imgs)
+    
+    def __getitem__(self, idx):
+        img = self.imgs[idx]
+
+        key = self.files[idx]
+        label = self.df[self.df['file'] == key]['label']
+        return img, label
+
+class ZillowUnsupervised(Dataset):
     def __init__(self, root, img_dim=224):
 
         self.preprocess = T.Compose([
@@ -29,16 +74,21 @@ class Zillow(Dataset):
         return self.preprocess(img), self.files[idx]
     
 def cluster(root, n=2):
-    dataset = Zillow(root)
+    dataset = ZillowUnsupervised(root)
 
     # Temp soln
     imgs = []
-    for i in range(0, 1000):
-        imgs.append(dataset[i])
+    for i in range(0, 500):
+        img, name = dataset[i]
+        imgs.append(img)
+    imgs = torch.stack(imgs).to('cuda')
+
+    inception = timm.create_model('inception_v4', pretrained=True).to('cuda')
+    embeddings = inception(imgs)
 
     kmeans = KMeans(n_clusters=2, init='random')    
     print("Fitting data")
-    kmeans.fit(imgs)
+    kmeans.fit(embeddings.cpu())
 
     print("Making predictions")
     Z = kmeans.predict(imgs)
@@ -63,4 +113,20 @@ def plot_clusters(Z, data):
             plt.axis('off')
         plt.show()
 
-cluster('C:\\Users\\jthra\\Documents\\data\\zillow_images_copy\\zillow_images')
+# cluster('D:\\Big_Data\\zillow_images')
+
+# inception = timm.create_model('inception_v4', pretrained=True)
+# inception.last_linear = nn.Identity()
+# print(inception)
+
+root = 'D:\\Big_Data\\zillow_images'
+csvpath = 'labels.csv'
+
+train_dataset, test_datset = get_train_test(root, csvpath)
+
+# print(len(train_dataset), len(test_datset))
+img, label = train_dataset[0]
+
+print(label)
+plt.imshow(img.permute(1, 2, 0))
+plt.show()
