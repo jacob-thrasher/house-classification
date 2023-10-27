@@ -39,7 +39,7 @@ class ZillowSupervised(Dataset):
         self.df = pd.read_csv(csvpath)
         self.imgs = []
         self.files = files
-        for file in self.files:
+        for file in tqdm(self.files):
             img = Image.open(os.path.join(root, file)).convert("RGB")
             img = preprocess(img)
             self.imgs.append(img)
@@ -51,8 +51,8 @@ class ZillowSupervised(Dataset):
         img = self.imgs[idx]
 
         key = self.files[idx]
-        label = self.df[self.df['file'] == key]['label']
-        return img, label
+        label = self.df[self.df['file'] == key].reset_index()['label'][0] # There is def a better way to do this
+        return img, int(label)
 
 class ZillowUnsupervised(Dataset):
     def __init__(self, root, img_dim=224):
@@ -119,14 +119,14 @@ def plot_clusters(Z, data):
 # inception.last_linear = nn.Identity()
 # print(inception)
 
-root = 'D:\\Big_Data\\zillow_images'
-csvpath = 'labels.csv'
+# root = 'D:\\Big_Data\\zillow_images'
+# csvpath = 'labels.csv'
 
-train_dataset, test_datset = get_train_test(root, csvpath)
+# train_dataset, test_datset = get_train_test(root, csvpath)
 
-# print(len(train_dataset), len(test_datset))
-img, label = train_dataset[0]
+# # print(len(train_dataset), len(test_datset))
+# img, label = train_dataset[0]
 
-print(label)
-plt.imshow(img.permute(1, 2, 0))
-plt.show()
+# print(label)
+# plt.imshow(img.permute(1, 2, 0))
+# plt.show()
