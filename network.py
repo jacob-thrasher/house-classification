@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from data import get_train_test
 import torchmetrics.functional as tmf
 
-class CNN(nn.Module):
+class SimpleCNN(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -77,7 +77,7 @@ def train(model_name='CNN'):
     train_dataloader = DataLoader(train_set, batch_size=32, shuffle=True)
     test_dataloader = DataLoader(test_set, batch_size=len(test_set), shuffle=True) 
 
-    model = CNN()
+    model = SimpleCNN()
 
     epochs = 150
     device = 'cpu'

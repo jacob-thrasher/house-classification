@@ -26,14 +26,34 @@ def get_train_test(root, csvpath, test_split=.1):
     test_dataset = ZillowSupervised(root, test_files, csvpath)
     return train_dataset, test_dataset
 
+class ErieParcels(Dataset):
+    def __init__(self, dataroot, csvpath, img_dim=224):
+        self.dataroot = dataroot
+        self.df = pd.read_csv(csvpath)
+
+        self.preprocess = T.Compose([
+            T.Resize(img_dim),
+            T.CenterCrop(img_dim),
+            T.ToTensor(),
+        ])
+
+    
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        parcel_number = str(row['parcel_number'])
+        img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
+        img = self.preprocess(img)
+
+        label = 0 if row['Homestead Status'] == 'Inactive' else 1
+        return img, label
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):
         preprocess = T.Compose([
-            T.Resize(img_dim),
-            T.CenterCrop(img_dim),
-            T.ToTensor(),
-            T.Normalize((.5, .5, .5), (.5, .5, .5))
+            T.Resize(img_dim),file
         ])
 
         self.df = pd.read_csv(csvpath)

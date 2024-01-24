@@ -1,17 +1,16 @@
-from crawler import ZillowScraper
 import json
 from time import sleep
+import pandas as pd
+from data import ErieParcels
+import matplotlib.pyplot as plt
 
-with open('config.json', 'r') as f:
-    config = json.load(f)
+csvpath = '/home/jacob/Documents/data/parcel_info.csv'
 
-pfpath = ""
-scraper = ZillowScraper(executable_path=config['driver'], profile_path=pfpath)
 
-scraper.search('98367')
-sleep(5)
+dataset = ErieParcels(dataroot='/home/jacob/Documents/data/parcels', csvpath=csvpath)
 
-scraper.get_homes()
+img, label = dataset[5000]
 
-# link = 'https://photos.zillowstatic.com/fp/2af66996f978e6217d566bd37447ef24-p_e.webp'
-
+print(label)
+plt.imshow(img.permute(1, 2, 0))
+plt.savefig('test.png')
