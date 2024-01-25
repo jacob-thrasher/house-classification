@@ -29,7 +29,11 @@ def get_train_test(root, csvpath, test_split=.1):
 class ErieParcels(Dataset):
     def __init__(self, dataroot, csvpath, img_dim=224):
         self.dataroot = dataroot
-        self.df = pd.read_csv(csvpath)
+        self.df = pd.read_csv(csvpath, dtype=str)
+
+        print(self.df.value_counts(self.df['Homestead Status']))
+
+        self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
 
         self.preprocess = T.Compose([
             T.Resize(img_dim),
