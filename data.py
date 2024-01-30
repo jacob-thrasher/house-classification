@@ -31,8 +31,6 @@ class ErieParcels(Dataset):
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath, dtype=str)
 
-        print(self.df.value_counts(self.df['Homestead Status']))
-
         self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
 
         self.preprocess = T.Compose([
@@ -51,7 +49,7 @@ class ErieParcels(Dataset):
         img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
         img = self.preprocess(img)
 
-        label = 0 if row['Homestead Status'] == 'Inactive' else 1
+        label = 1 if row['Homestead Status'] == 'Inactive' else 0
         return img, label
 
 class ZillowSupervised(Dataset):

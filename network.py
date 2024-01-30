@@ -6,6 +6,7 @@ import time
 import matplotlib.pyplot as plt
 from data import get_train_test
 import torchmetrics.functional as tmf
+import os
 
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -70,14 +71,17 @@ def test_step(model, dataloader, loss_fn, device):
 
     return loss, acc, f1
 
-def train(model_name='CNN'):
+def train(train_dataset, test_dataset, model_name='CNN'):
     print(torch.cuda.is_available())
-    train_set, test_set = get_train_test(root='D:\\Big_Data\\zillow_images', csvpath='labels.csv')
+    # train_set, test_set = get_train_test(root='D:\\Big_Data\\zillow_images', csvpath='labels.csv')
+    
 
-    train_dataloader = DataLoader(train_set, batch_size=32, shuffle=True)
-    test_dataloader = DataLoader(test_set, batch_size=len(test_set), shuffle=True) 
+    train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=128, shuffle=False) 
 
-    model = SimpleCNN()
+    # model = SimpleCNN()
+    model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+    model.fc = nn.Linear(512, 1)
 
     epochs = 150
     device = 'cpu'
@@ -86,8 +90,8 @@ def train(model_name='CNN'):
         device='cuda'
     model.to(device)
 
-    # optim = Adam(model.parameters(), lr=0.001)
-    optim = SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optim = Adam(model.parameters(), lr=0.001)
+    # optim = SGD(model.parameters(), lr=0.001, momentum=0.9)
     loss_fn = nn.BCELoss()
 
     best_valid_loss = 1e10
@@ -111,23 +115,23 @@ def train(model_name='CNN'):
         if valid_loss < best_valid_loss:
             torch.save(model.state_dict(), f'{model_name}.pt')
 
-    plt.figure()
-    plt.plot(train_losses, label='Train loss', color='green')
-    plt.plot(valid_losses, label='Val loss', color='red')    
-    plt.xlabel("epochs")
-    plt.ylabel("BCE Loss")
-    plt.title("Loss over time")
-    plt.legend(loc='upper center')
-    plt.savefig('loss.png')
+        plt.figure()
+        plt.plot(train_losses, label='Train loss', color='green')
+        plt.plot(valid_losses, label='Val loss', color='red')    
+        plt.xlabel("epochs")
+        plt.ylabel("BCE Loss")
+        plt.title("Loss over time")
+        plt.legend(loc='upper center')
+        plt.savefig(os.path.join('metrics', model_name, 'loss.png'))
 
-    plt.figure()
-    plt.plot(valid_accs, label='Accuracy', color='green')
-    plt.plot(valid_f1s, label='F1 score', color='red')    
-    plt.xlabel("epochs")
-    plt.ylabel("Score")
-    plt.title("Validation accuracy and F1 over time")
-    plt.legend(loc='lower right')
-    plt.savefig('acc_f1.png')
+        plt.figure()
+        plt.plot(valid_accs, label='Accuracy', color='green')
+        plt.plot(valid_f1s, label='F1 score', color='red')    
+        plt.xlabel("epochs")
+        plt.ylabel("Score")
+        plt.title("Validation accuracy and F1 over time")
+        plt.legend(loc='lower right')
+        plt.savefig(os.path.join('metrics', model_name, 'acc_f1.png'))
 
 # print("CUDA:", torch.cuda.is_available())
 # torch.manual_seed(1)
