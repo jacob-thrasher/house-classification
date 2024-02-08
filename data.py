@@ -27,11 +27,13 @@ def get_train_test(root, csvpath, test_split=.1):
     return train_dataset, test_dataset
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False):
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath, dtype=str)
 
         self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
+
+        if year_regression: self.df = self.df[~self.df['year_built'].isna()]
 
         self.preprocess = T.Compose([
             T.Resize(img_dim),
@@ -49,8 +51,9 @@ class ErieParcels(Dataset):
         img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
         img = self.preprocess(img)
 
-        label = 1 if row['Homestead Status'] == 'Inactive' else 0
-        return img, label
+        homestread_status = 1 if row['Homestead Status'] == 'Inactive' else 0
+        year = row['year_built']
+        return img, abs(float(year))
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):

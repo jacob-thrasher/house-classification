@@ -49,3 +49,24 @@ def create_confusion_matix(model, dataloader, device):
     plt.show()
     fig.savefig('metrics\\cm.png')
 
+def plot_attention(model,
+                   img, out_dir: str,
+                   title: str):
+
+    fig, ax = plt.subplots(nrows=1, ncols=5, figsize=(15, 3))
+    fig.suptitle(title)
+
+
+
+    model.eval()
+    with torch.no_grad():
+        gs = model(img)
+
+    ax[0].imshow(img.squeeze().permute(1, 2, 0))
+
+    for i, g in enumerate(gs):
+        ax[i+1].imshow(g[0], interpolation='bicubic', cmap='gray')
+        ax[i+1].set_title(f'g{i}')
+
+    plt.show()
+

@@ -1,40 +1,117 @@
-import json
-from time import sleep
-import pandas as pd
-from data import ErieParcels
-import matplotlib.pyplot as plt
-import os
-from network import train
+from transformers import AutoImageProcessor, ViTForImageClassification
 import torch
-from utils import create_confusion_matix
-from torch.utils.data import DataLoader
-from network import SimpleCNN
-root = 'D:\\Big_Data'
-# csvpath = 'D:\\Big_Data\\parcel_info.csv'
-# df = pd.read_csv(csvpath)
-# train = df.sample(frac=0.8)
-# test = df[~df.index.isin(train.index)]
+from datasets import load_dataset
+import matplotlib.pyplot as plt
+from torch import nn
+import timm
+import numpy as np
+from PIL import Image, ImageFilter
+from torchvision import transforms
+import cv2
+import os
+from torchvision import models
+from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
+import torchvision.transforms as T
+from data import ErieParcels
+from network import train
 
-# print(len(train), len(test))
+class ResNetAT(ResNet):
+    """Attention maps of ResNeXt-101 32x8d.
 
-# train.to_csv(os.path.join(dst, 'erietrain.csv'))
-# test.to_csv(os.path.join(dst, 'erietest.csv'))
+    Overloaded ResNet model to return attention maps.
+    """
 
-# dataset = ErieParcels(dataroot='D:\\Big_Data\\parcels', csvpath=csvpath)
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        g0 = self.layer1(x)
+        g1 = self.layer2(g0)
+        g2 = self.layer3(g1)
+        g3 = self.layer4(g2)
+
+        return [g.pow(2).mean(1) for g in (g0, g1, g2, g3)]
+
+def resnet18():
+    # base = models.resnet18(pretrained=True)
+    base = models.resnet18(pretrained=True)
+    base.fc = nn.Linear(512, 1)
+
+    base.load_state_dict(torch.load('models/regression.pt'), strict=False)
+
+    model = ResNetAT(BasicBlock, [2, 2, 2, 2])
+    model.fc = nn.Linear(512, 1)
+    model.load_state_dict(base.state_dict(), strict=False)
+    return model
+
+def plot_attention(model,
+                    img, out_dir: str,
+                    title: str):
+
+    fig, ax = plt.subplots(nrows=1, ncols=5, figsize=(15, 3))
+    fig.suptitle(title)
 
 
-train_dataset = ErieParcels(dataroot=os.path.join(root, 'parcels'), csvpath=os.path.join(root, 'erietrain.csv'))
-test_dataset = ErieParcels(dataroot=os.path.join(root, 'parcels'), csvpath=os.path.join(root, 'erietest.csv'))
 
-# test_dataloader = DataLoader(test_dataset, batch_size=128)
+    model.eval()
+    with torch.no_grad():
+        gs = model(img)
 
-# model = SimpleCNN()
-# model.load_state_dict(torch.load('models\\homestead-status.pt'))
-# device = 'cuda'
-# model.to(device)
-# create_confusion_matix(model, test_dataloader, device)
+    ax[0].imshow(img.squeeze().permute(1, 2, 0))
+
+    for i, g in enumerate(gs):
+        ax[i+1].imshow(g[0], interpolation='bicubic', cmap='gray')
+        ax[i+1].set_title(f'g{i}')
+
+    plt.show()
+
+    # Save pdf versions
+    # Path(f"{out_dir}_pdf").mkdir(parents=True, exist_ok=True)
+    # fig_filename = os.path.join(f"{out_dir}_pdf", f"{title}.pdf")
+    # fig.savefig(fig_filename, bbox_inches='tight')
+
+    # # Save png versions
+    # Path(f"{out_dir}_png").mkdir(parents=True, exist_ok=True)
+    # fig_filename = os.path.join(f"{out_dir}_png", f"{title}.png")
+    # fig.savefig(fig_filename, bbox_inches='tight')
 
 
-train(train_dataset, test_dataset, model_name='homestead-status')
+
+
+
+root = 'D:\Big_Data'
+train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=True)
+test_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietest.csv'), year_regression=True)
+
+train(train_dataset, test_dataset, model_name='regression')
+
+
+
+
+
+# model = resnet18()
+# model.eval()
+
+# base = models.resnet18(pretrained=True)
+# base.fc = nn.Linear(512, 1)
+# base.load_state_dict(torch.load('models/regression.pt'), strict=False)
+# for i in range(4):
+#     img, year = test_dataset[i]
+
+#     pred = base(img.unsqueeze(0))
+#     print(f'Real: {year}\nPred: {pred}')
+#     plot_attention(model, img.unsqueeze(0), None, 'Test')
+#     plt.close()
+
+
+# NOTES
+
+# Regression_1 is best model with Adam lr=0.001
+
+
+
+
 
 

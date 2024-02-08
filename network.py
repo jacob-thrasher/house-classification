@@ -7,6 +7,28 @@ import matplotlib.pyplot as plt
 from data import get_train_test
 import torchmetrics.functional as tmf
 import os
+from torchvision import models
+from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
+class ResNetAT(ResNet):
+    """Attention maps of ResNeXt-101 32x8d.
+
+    Overloaded ResNet model to return attention maps.
+    """
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        g0 = self.layer1(x)
+        g1 = self.layer2(g0)
+        g2 = self.layer3(g1)
+        g3 = self.layer4(g2)
+
+        return [g.pow(2).mean(1) for g in (g0, g1, g2, g3)]
 
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -35,6 +57,13 @@ class SimpleCNN(nn.Module):
         x = self.head(x)
         return nn.functional.sigmoid(x)
     
+
+def resnet18():
+    base = models.resnet18(pretrained=True)
+    model = ResNetAT(BasicBlock, [2, 2, 2, 2])
+    model.load_state_dict(base.state_dict())
+    return model
+
 def train_step(model, dataloader, optim, loss_fn, device):
     model.train()
     epoch_loss = 0
@@ -55,21 +84,22 @@ def train_step(model, dataloader, optim, loss_fn, device):
 
 def test_step(model, dataloader, loss_fn, device):
     model.eval()
-    loss = 0
+    running_loss = 0
 
-    X, y = next(iter(dataloader))
-    X = X.to(device)
-    y = y.type(torch.float32).to(device)
+    for (X, y) in (dataloader):
+        X = X.to(device)
+        y = y.type(torch.float32).to(device)
 
-    out = model(X)
-    loss = loss_fn(out.squeeze(), y)
-    loss = loss.item()
+        out = model(X)
+        loss = loss_fn(out.squeeze(), y)
+        running_loss += loss.item()
 
-    acc = tmf.classification.accuracy(out.squeeze(), y, task='binary')
-    f1 = tmf.f1_score(out.squeeze(), y, task='binary')
+    # acc = tmf.classification.accuracy(out.squeeze(), y, task='binary')
+    # f1 = tmf.f1_score(out.squeeze(), y, task='binary')
 
-
-    return loss, acc, f1
+    acc = 0
+    f1 = 0
+    return running_loss / len(dataloader), acc, f1
 
 def train(train_dataset, test_dataset, model_name='CNN'):
     print(torch.cuda.is_available())
@@ -90,9 +120,11 @@ def train(train_dataset, test_dataset, model_name='CNN'):
         device='cuda'
     model.to(device)
 
-    optim = Adam(model.parameters(), lr=0.001)
-    # optim = SGD(model.parameters(), lr=0.001, momentum=0.9)
-    loss_fn = nn.BCELoss()
+    optim = Adam(model.parameters(), lr=0.1, weight_decay=0.01)
+    # scheduler = CosineAnnealingLR(optim, T_max=150)
+
+    # loss_fn = nn.BCELoss()
+    loss_fn = nn.MSELoss()
 
     best_valid_loss = 1e10
     # # loop
@@ -106,32 +138,35 @@ def train(train_dataset, test_dataset, model_name='CNN'):
         valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device)
         end = time.time()
 
+        # scheduler.step()
+
         print(f'Epoch {epoch}/{epochs}:\nAvg Train Loss: {train_loss}\nAvg Valid Loss: {valid_loss}, Acc: {valid_acc}, F1 : {valid_f1}\nEpoch Time: {end - start}s\n')
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
-        valid_accs.append(valid_acc.cpu())
-        valid_f1s.append(valid_f1.cpu())
+        valid_accs.append(valid_acc)
+        valid_f1s.append(valid_f1)
 
         if valid_loss < best_valid_loss:
-            torch.save(model.state_dict(), f'{model_name}.pt')
+            torch.save(model.state_dict(), f'models/{model_name}.pt')
 
         plt.figure()
         plt.plot(train_losses, label='Train loss', color='green')
         plt.plot(valid_losses, label='Val loss', color='red')    
         plt.xlabel("epochs")
-        plt.ylabel("BCE Loss")
+        plt.ylabel("MSE Loss")
         plt.title("Loss over time")
         plt.legend(loc='upper center')
         plt.savefig(os.path.join('metrics', model_name, 'loss.png'))
+        plt.close()
 
-        plt.figure()
-        plt.plot(valid_accs, label='Accuracy', color='green')
-        plt.plot(valid_f1s, label='F1 score', color='red')    
-        plt.xlabel("epochs")
-        plt.ylabel("Score")
-        plt.title("Validation accuracy and F1 over time")
-        plt.legend(loc='lower right')
-        plt.savefig(os.path.join('metrics', model_name, 'acc_f1.png'))
+        # plt.figure()
+        # plt.plot(valid_accs, label='Accuracy', color='green')
+        # plt.plot(valid_f1s, label='F1 score', color='red')    
+        # plt.xlabel("epochs")
+        # plt.ylabel("Score")
+        # plt.title("Validation accuracy and F1 over time")
+        # plt.legend(loc='lower right')
+        # plt.savefig(os.path.join('metrics', model_name, 'acc_f1.png'))
 
 # print("CUDA:", torch.cuda.is_available())
 # torch.manual_seed(1)
