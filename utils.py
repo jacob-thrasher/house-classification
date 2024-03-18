@@ -40,12 +40,13 @@ def create_confusion_matix(model, dataloader, device):
         X = X.to(device)
     
         pred = model(X)
-        pred = torch.round(pred.detach().cpu()).squeeze()
+        # pred = torch.round(pred.detach().cpu()).squeeze()
+        pred = torch.argmax(pred, dim=1)
         pred = [int(x.item()) for x in list(pred)]
         all_pred += pred
         all_labels += y.tolist()
 
-    fig, ax = plot_confusion_matrix(all_pred, all_labels, classes=['Active', 'Inactive'])
+    fig, ax = plot_confusion_matrix(all_pred, all_labels, classes=['Before 1971', 'On/After 1971'])
     plt.show()
     fig.savefig('metrics\\cm.png')
 

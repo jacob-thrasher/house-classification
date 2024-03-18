@@ -1,6 +1,7 @@
 import os
 import torch
 from torch import nn
+import transformers
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 from sklearn.cluster import KMeans
@@ -11,6 +12,7 @@ from tqdm import tqdm
 import timm
 import pandas as pd
 import random
+import math
 
 def get_train_test(root, csvpath, test_split=.1):
     df = pd.read_csv(csvpath)
@@ -29,18 +31,24 @@ def get_train_test(root, csvpath, test_split=.1):
 class ErieParcels(Dataset):
     def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False):
         self.dataroot = dataroot
-        self.df = pd.read_csv(csvpath, dtype=str)
+        self.df = pd.read_csv(csvpath)
 
         self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
 
         if year_regression: self.df = self.df[~self.df['year_built'].isna()]
+        else:
+            self.df = self.df[self.df['classification'] != 'E']
+            self.df = self.df[self.df['classification'] != 'F']
 
         self.preprocess = T.Compose([
-            T.Resize(img_dim),
-            T.CenterCrop(img_dim),
+            T.RandomCrop(img_dim),
             T.ToTensor(),
+            T.RandomHorizontalFlip(),
+            T.Normalize((0.5), (0.5)),
+            T.ColorJitter()
         ])
 
+        self.swin_processor = transformers.AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
     
     def __len__(self):
         return len(self.df)
@@ -49,11 +57,14 @@ class ErieParcels(Dataset):
         row = self.df.iloc[idx]
         parcel_number = str(row['parcel_number'])
         img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
-        img = self.preprocess(img)
-
-        homestread_status = 1 if row['Homestead Status'] == 'Inactive' else 0
+        # img = self.preprocess(img)
+        img = self.swin_processor(img, return_tensors='pt')
+        
+        homestread_status = 1 if row['homestead_status'] == 'Inactive' else 0
         year = row['year_built']
-        return img, abs(float(year))
+        # return img, math.floor(abs(float(year)))
+        # return img, int(abs(float(year)) > 1971)
+        return img.pixel_values.squeeze(), homestread_status
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):

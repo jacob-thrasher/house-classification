@@ -13,7 +13,12 @@ from torchvision import models
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 import torchvision.transforms as T
 from data import ErieParcels
-from network import train
+from network import train, test_step
+import pandas as pd
+from utils import create_confusion_matix
+import transformers
+import random
+
 
 class ResNetAT(ResNet):
     """Attention maps of ResNeXt-101 32x8d.
@@ -37,12 +42,12 @@ class ResNetAT(ResNet):
 def resnet18():
     # base = models.resnet18(pretrained=True)
     base = models.resnet18(pretrained=True)
-    base.fc = nn.Linear(512, 1)
+    base.fc = nn.Linear(512, 2)
 
-    base.load_state_dict(torch.load('models/regression.pt'), strict=False)
+    base.load_state_dict(torch.load('models/BCE_homestead_sgd1.pt'), strict=False)
 
     model = ResNetAT(BasicBlock, [2, 2, 2, 2])
-    model.fc = nn.Linear(512, 1)
+    model.fc = nn.Linear(512, 2)
     model.load_state_dict(base.state_dict(), strict=False)
     return model
 
@@ -79,13 +84,39 @@ def plot_attention(model,
 
 
 
+torch.manual_seed(69)   
+np.random.seed(69)
+random.seed(69)
 
 
 root = 'D:\Big_Data'
-train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=True)
-test_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietest.csv'), year_regression=True)
 
-train(train_dataset, test_dataset, model_name='regression')
+train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=False)
+val_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erieval.csv'), year_regression=False)
+
+
+train(train_dataset, val_dataset, model_name='hs_swin_adam3e-5_wd0.01')
+
+
+# test_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietest.csv'), year_regression=False)
+# test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=64)
+
+# model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
+# model.fc = nn.Linear(512, 2)
+# model.load_state_dict(torch.load('models/BCE_homestead_sgd.pt'), strict=False)
+# model.to('cuda')
+
+# loss, acc, f1 = test_step(model, test_dataloader, nn.CrossEntropyLoss(), 'cuda')
+# print(acc, f1)
+
+# create_confusion_matix(model, test_dataloader, 'cuda')
+
+# print(len(train_dataset))
+# after = 0
+# for _, label in train_dataset:
+#     after += label
+
+# print(after, len(train_dataset) - after)
 
 
 
@@ -95,15 +126,21 @@ train(train_dataset, test_dataset, model_name='regression')
 # model.eval()
 
 # base = models.resnet18(pretrained=True)
-# base.fc = nn.Linear(512, 1)
-# base.load_state_dict(torch.load('models/regression.pt'), strict=False)
-# for i in range(4):
-#     img, year = test_dataset[i]
+# base.fc = nn.Linear(512, 2)
+# base.load_state_dict(torch.load('models/BCE_homestead_sgd1.pt'), strict=False)
+
+# total_positive = 0
+# for i in range(len(val_dataset)):
+#     img, year = val_dataset[i]
 
 #     pred = base(img.unsqueeze(0))
-#     print(f'Real: {year}\nPred: {pred}')
-#     plot_attention(model, img.unsqueeze(0), None, 'Test')
-#     plt.close()
+#     pred = torch.nn.functional.softmax(pred, dim=1)
+#     total_positive += torch.argmax(pred, dim=1).item()
+#     # print(f'Real: {year}\nPred: {torch.argmax(pred, dim=1)}')
+#     # plot_attention(model, img.unsqueeze(0), None, 'Test')
+#     # plt.close()
+
+# print(total_positive)
 
 
 # NOTES
