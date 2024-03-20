@@ -68,36 +68,37 @@ def resnet18():
     model.load_state_dict(base.state_dict())
     return model
 
-def train_step(model, dataloader, optim, loss_fn, device):
+def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, accum_iter=1):
     model.train()
     epoch_loss = 0
 
-    for batch, (X, y) in enumerate(tqdm(dataloader, disable=True)):
+    for batch, (X, y) in enumerate(tqdm(dataloader, disable=(not show_progress))):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
 
-        optim.zero_grad()
         out = model(X).logits
         # loss = loss_fn(out.logits.squeeze(), y)
-        loss = loss_fn(out.squeeze(), y)
-        epoch_loss += loss.item()
+        loss = loss_fn(out.squeeze(), y).item()
+        epoch_loss += loss
+
+        loss = loss / accum_iter # Normalize loss for accumulation
         loss.backward()
-        optim.step()
+
+        # Gradient accumulation
+        if (batch + 1) % accum_iter == 0 or (batch + 1) == len(dataloader):
+            optim.step()
+            optim.zero_grad()
 
     return epoch_loss / len(dataloader)
 
-def test_step(model, dataloader, loss_fn, device):
+def test_step(model, dataloader, loss_fn, device, show_progress=True):
     model.eval()
     running_loss = 0
-    print("FLAG 1")
-    for (X, y) in tqdm(dataloader, disable=True):
-        print("FLAG 2")
+    for (X, y) in tqdm(dataloader, disable=(not show_progress)):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
-        print("FLAG 3")
         y = y.to(device)
-        print("FLAG 4")
         out = model(X).logits
 
         loss = loss_fn(out.squeeze(), y)
@@ -111,17 +112,14 @@ def test_step(model, dataloader, loss_fn, device):
 
     return running_loss / len(dataloader), acc, f1
 
-def train(train_dataset, test_dataset, model, optim, epochs=20, model_name='CNN'):
-    print(torch.cuda.is_available())
+def train(train_dataloader, test_dataloader, model, optim, config, show_progress=False):
     
+    model_name = config['model_name']
     if not os.path.exists(model_name):
         os.mkdir(model_name)
     else:
         print("MODEL ALREADY EXISTS")
         return
-
-    train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False) 
 
     # model = SimpleCNN()
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
@@ -132,14 +130,21 @@ def train(train_dataset, test_dataset, model, optim, epochs=20, model_name='CNN'
 
     device = 'cpu'
     if torch.cuda.is_available():
-        print("Sending to cuda device")
-        device='cuda'
+        device = 'cuda'
+        num_devices = torch.cuda.device_count()
+        devices = list(range(num_devices))
+
+        print("Using devices", devices)
+    
+    if device != 'cpu':
+        model = nn.DataParallel(model, device_ids=devices)
     model.to(device)
 
     loss_fn = nn.CrossEntropyLoss()
     # loss_fn = nn.MSELoss()
 
     best_acc = 0
+    epochs = config['epochs']
     # loop
     train_losses = []
     valid_losses = []
@@ -147,8 +152,8 @@ def train(train_dataset, test_dataset, model, optim, epochs=20, model_name='CNN'
     valid_f1s = []
     for epoch in range(epochs):
         start = time.time()
-        train_loss = train_step(model, train_dataloader, optim, loss_fn, device)
-        valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device)
+        train_loss = train_step(model, train_dataloader, optim, loss_fn, device, show_progress=show_progress)
+        valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device, show_progress=show_progress)
         end = time.time()
 
         # scheduler.step()

@@ -18,15 +18,15 @@ import pandas as pd
 from utils import create_confusion_matix
 import transformers
 import random
-from torch.optim import Adam, SGD
+from torch.optim import Adam, SGD, AdamW
 
 torch.manual_seed(69)   
 np.random.seed(69)
 random.seed(69)
 
 
-root = '/scratch/jdt0025/erie_data'
-model_path = "swinv2-tiny-patch4-window8-256"
+root = '/home/jacob/Documents/data/erie_data'
+model_path = "microsoft/swinv2-tiny-patch4-window8-256"
 
 train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=False, model_path=model_path)
 val_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erieval.csv'), year_regression=False, model_path=model_path)
@@ -36,8 +36,8 @@ model = transformers.Swinv2ForImageClassification.from_pretrained(model_path)
 model.classifier = nn.Linear(768, 2)
 
 print("STARTING MODEL 1")
-optim = Adam(model.parameters(), lr=3e-5, weight_decay=0.1)
-train(train_dataset, val_dataset, model, optim, model_name='swin_adam3e-5_wd0.1', epochs=25)
+optim = AdamW(model.parameters(), lr=3e-5)
+train(train_dataset, val_dataset, model, optim, model_name='swin_adamW3e-5', epochs=25, show_progress=True)
 
 # print("STARTING MODEL 2")
 # optim = Adam(model.parameters(), lr=3e-5, weight_decay=0)
