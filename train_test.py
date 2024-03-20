@@ -72,7 +72,7 @@ def train_step(model, dataloader, optim, loss_fn, device):
     model.train()
     epoch_loss = 0
 
-    for batch, (X, y) in enumerate(tqdm(dataloader)):
+    for batch, (X, y) in enumerate(tqdm(dataloader, disable=True)):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
@@ -91,7 +91,7 @@ def test_step(model, dataloader, loss_fn, device):
     model.eval()
     running_loss = 0
     print("FLAG 1")
-    for (X, y) in tqdm(dataloader):
+    for (X, y) in tqdm(dataloader, disable=True):
         print("FLAG 2")
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
@@ -111,13 +111,17 @@ def test_step(model, dataloader, loss_fn, device):
 
     return running_loss / len(dataloader), acc, f1
 
-def train(train_dataset, test_dataset, model, optim, model_name='CNN'):
+def train(train_dataset, test_dataset, model, optim, epochs=20, model_name='CNN'):
     print(torch.cuda.is_available())
-    # train_set, test_set = get_train_test(root='D:\\Big_Data\\zillow_images', csvpath='labels.csv')
     
+    if not os.path.exists(model_name):
+        os.mkdir(model_name)
+    else:
+        print("MODEL ALREADY EXISTS")
+        return
 
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False) 
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False) 
 
     # model = SimpleCNN()
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
@@ -126,24 +130,17 @@ def train(train_dataset, test_dataset, model, optim, model_name='CNN'):
     # model = transformers.Swinv2ForImageClassification.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
     # model.classifier = nn.Linear(768, 2)
 
-    epochs = 20
     device = 'cpu'
     if torch.cuda.is_available():
         print("Sending to cuda device")
         device='cuda'
     model.to(device)
 
-    # optim = Adam(model.parameters(), lr=3e-5, weight_decay=0.01)
-    # optim = RMSprop(model.parameters(), lr=1e-4)
-    # optim = SGD(model.parameters(), lr=1e-4, weight_decay=0, momentum=.9)
-    # scheduler = CosineAnnealingLR(optim, T_max=150)
-
     loss_fn = nn.CrossEntropyLoss()
     # loss_fn = nn.MSELoss()
 
-    # best_valid_loss = 1e10
     best_acc = 0
-    # # loop
+    # loop
     train_losses = []
     valid_losses = []
     valid_accs = []
@@ -163,7 +160,7 @@ def train(train_dataset, test_dataset, model, optim, model_name='CNN'):
         valid_f1s.append(valid_f1)
 
         if valid_acc > best_acc:
-            torch.save(model.state_dict(), f'models/{model_name}.pt')
+            torch.save(model.state_dict(), f'{model_name}/best_model.pt')
 
         plt.figure()
         plt.plot(train_losses, label='Train loss', color='green')
@@ -172,7 +169,7 @@ def train(train_dataset, test_dataset, model, optim, model_name='CNN'):
         plt.ylabel("Loss")
         plt.title("Loss over time")
         plt.legend(loc='upper center')
-        plt.savefig(os.path.join('metrics', f'{model_name}_loss.png'))
+        plt.savefig(os.path.join(model_name, f'loss.png'))
         plt.close()
 
         plt.figure()
@@ -182,5 +179,5 @@ def train(train_dataset, test_dataset, model, optim, model_name='CNN'):
         plt.ylabel("Score")
         plt.title("Validation accuracy and F1 over time")
         plt.legend(loc='lower right')
-        plt.savefig(os.path.join('metrics', f'{model_name}_accf1.png'))
+        plt.savefig(os.path.join(model_name, f'accf1.png'))
         plt.close()

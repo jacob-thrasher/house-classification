@@ -1,0 +1,4 @@
+optim:
+  lr: 0.00003
+  weight_decay: 0.01
+  momentum: 0.9

@@ -13,7 +13,7 @@ from torchvision import models
 from torchvision.models.resnet import BasicBlock, Bottleneck, ResNet
 import torchvision.transforms as T
 from data import ErieParcels
-from network import train, test_step
+from train_test import train, test_step
 import pandas as pd
 from utils import create_confusion_matix
 import transformers
@@ -84,18 +84,7 @@ def plot_attention(model,
 
 
 
-torch.manual_seed(69)   
-np.random.seed(69)
-random.seed(69)
 
-
-root = 'D:\Big_Data'
-
-train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=False)
-val_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erieval.csv'), year_regression=False)
-
-
-train(train_dataset, val_dataset, model_name='hs_swin_adam3e-5_wd0.01')
 
 
 # test_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietest.csv'), year_regression=False)

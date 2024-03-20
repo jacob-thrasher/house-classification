@@ -29,7 +29,7 @@ def get_train_test(root, csvpath, test_split=.1):
     return train_dataset, test_dataset
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, model_path="swinv2-tiny-patch4-window8-256"):
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath)
 
@@ -40,15 +40,13 @@ class ErieParcels(Dataset):
             self.df = self.df[self.df['classification'] != 'E']
             self.df = self.df[self.df['classification'] != 'F']
 
-        self.preprocess = T.Compose([
+        self.augment = T.Compose([
             T.RandomCrop(img_dim),
-            T.ToTensor(),
             T.RandomHorizontalFlip(),
-            T.Normalize((0.5), (0.5)),
             T.ColorJitter()
         ])
 
-        self.swin_processor = transformers.AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
+        self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
     
     def __len__(self):
         return len(self.df)
@@ -64,7 +62,7 @@ class ErieParcels(Dataset):
         year = row['year_built']
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
-        return img.pixel_values.squeeze(), homestread_status
+        return self.augment(img.pixel_values.squeeze()), homestread_status
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):

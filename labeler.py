@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from network import CNN
+from train_test import CNN
 import torch
 from data import ZillowUnsupervised
 
