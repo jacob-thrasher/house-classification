@@ -68,9 +68,10 @@ def resnet18():
     model.load_state_dict(base.state_dict())
     return model
 
-def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, accum_iter=1):
+def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, accum_iter=1, schedulers=None):
     model.train()
     epoch_loss = 0
+    lrs = []
 
     for batch, (X, y) in enumerate(tqdm(dataloader, disable=(not show_progress))):
         X = X.to(device)
@@ -79,18 +80,28 @@ def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, ac
 
         out = model(X).logits
         # loss = loss_fn(out.logits.squeeze(), y)
-        loss = loss_fn(out.squeeze(), y).item()
-        epoch_loss += loss
-
-        loss = loss / accum_iter # Normalize loss for accumulation
+        loss = loss_fn(out.squeeze(), y)
+        print(loss)
         loss.backward()
+
+        epoch_loss += loss.item()
+        loss = loss.item() / accum_iter # Normalize loss for accumulation
 
         # Gradient accumulation
         if (batch + 1) % accum_iter == 0 or (batch + 1) == len(dataloader):
             optim.step()
             optim.zero_grad()
 
-    return epoch_loss / len(dataloader)
+            if schedulers is not None:
+                warmup = schedulers['warmup']
+                lr_scheduler = schedulers['lr_scheduler']
+
+                with warmup.dampening():
+                    if warmup.last_step + 1 >= schedulers['warmup_period']:
+                        lr_scheduler.step()
+            lrs.append(optim.param_groups[0]['lr'])
+
+    return epoch_loss / len(dataloader), lrs
 
 def test_step(model, dataloader, loss_fn, device, show_progress=True):
     model.eval()
@@ -112,7 +123,7 @@ def test_step(model, dataloader, loss_fn, device, show_progress=True):
 
     return running_loss / len(dataloader), acc, f1
 
-def train(train_dataloader, test_dataloader, model, optim, config, show_progress=False):
+def train(train_dataloader, test_dataloader, model, optim, config):
     
     model_name = config['model_name']
     if not os.path.exists(model_name):
@@ -135,7 +146,7 @@ def train(train_dataloader, test_dataloader, model, optim, config, show_progress
         devices = list(range(num_devices))
 
         print("Using devices", devices)
-    
+    print(device)
     if device != 'cpu':
         model = nn.DataParallel(model, device_ids=devices)
     model.to(device)
@@ -150,19 +161,20 @@ def train(train_dataloader, test_dataloader, model, optim, config, show_progress
     valid_losses = []
     valid_accs = []
     valid_f1s = []
+    optim_lrs = []
     for epoch in range(epochs):
         start = time.time()
-        train_loss = train_step(model, train_dataloader, optim, loss_fn, device, show_progress=show_progress)
-        valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device, show_progress=show_progress)
+        train_loss, lrs = train_step(model, train_dataloader, optim, loss_fn, device, show_progress=config['show_progress'], schedulers=config['schedulers'], accum_iter=config['accum_iter'])
+        valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device, show_progress=config['show_progress'])
         end = time.time()
 
-        # scheduler.step()
 
         print(f'Epoch {epoch}/{epochs}:\nAvg Train Loss: {train_loss}\nAvg Valid Loss: {valid_loss}, Acc: {valid_acc}, F1 : {valid_f1}\nEpoch Time: {end - start}s\n')
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
         valid_accs.append(valid_acc)
         valid_f1s.append(valid_f1)
+        optim_lrs += lrs
 
         if valid_acc > best_acc:
             torch.save(model.state_dict(), f'{model_name}/best_model.pt')
@@ -185,4 +197,13 @@ def train(train_dataloader, test_dataloader, model, optim, config, show_progress
         plt.title("Validation accuracy and F1 over time")
         plt.legend(loc='lower right')
         plt.savefig(os.path.join(model_name, f'accf1.png'))
+        plt.close()
+
+        plt.figure()
+        plt.plot(optim_lrs, label='LR', color='orange')
+        plt.xlabel("iterations")
+        plt.ylabel("Learning rate")
+        plt.title("Scheduled learning rate")
+        plt.legend(loc='lower right')
+        plt.savefig(os.path.join(model_name, f'lr.png'))
         plt.close()
