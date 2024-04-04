@@ -29,7 +29,7 @@ def get_train_test(root, csvpath, test_split=.1):
     return train_dataset, test_dataset
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, model_path="swinv2-tiny-patch4-window8-256"):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, img_processor=None):
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath)
 
@@ -46,8 +46,11 @@ class ErieParcels(Dataset):
             T.ColorJitter()
         ])
 
-        self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
-    
+        if img_processor is not None: self.processor = img_processor
+        else: self.processor = T.Compose([
+            T.ToTensor()
+        ])
+
     def __len__(self):
         return len(self.df)
     
@@ -56,13 +59,15 @@ class ErieParcels(Dataset):
         parcel_number = str(row['parcel_number'])
         img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
         # img = self.preprocess(img)
-        img = self.swin_processor(img, return_tensors='pt')
-        
+        # img = self.processor(img, return_tensors='pt')
+        # img = self.processor(img)
+
         homestread_status = 1 if row['homestead_status'] == 'Inactive' else 0
         year = row['year_built']
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
-        return self.augment(img.pixel_values.squeeze()), homestread_status
+        # return self.augment(img.pixel_values.squeeze()), homestread_status
+        return img, homestread_status, parcel_number
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):
