@@ -6,3 +6,4 @@ swin*
 vit*
 sim*
 metrics
+*.pt

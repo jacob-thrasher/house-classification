@@ -29,9 +29,10 @@ def get_train_test(root, csvpath, test_split=.1):
     return train_dataset, test_dataset
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, model_path="swinv2-tiny-patch4-window8-256"):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, model_path="swinv2-tiny-patch4-window8-256", return_id=False):
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath)
+        self.return_id = return_id
 
         self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
 
@@ -65,6 +66,7 @@ class ErieParcels(Dataset):
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
         # return self.augment(img.pixel_values.squeeze()), homestread_status
+        if self.return_id: return self.augment(img), homestread_status, parcel_number
         return self.augment(img), homestread_status
 
 class ZillowSupervised(Dataset):
