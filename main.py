@@ -4,6 +4,7 @@ import torch
 import random
 import transformers
 import pytorch_warmup as warmup
+import timm
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR
 from torch.optim import Adam, SGD, AdamW
@@ -19,23 +20,25 @@ random.seed(seed)
 
 
 config = {
-    'model_name': f'sim_adam-lr3e-5_seed_{seed}',
+    'model_name': f'vit_adam-lr3e-5_no-wd_seed_{seed}',
     'model_path': "swinv2-tiny-patch4-window8-256",
     'epochs': 10,
-    'batch_size': 32,
-    'accum_iter': 4,
+    'batch_size': 64,
+    'accum_iter': 1,
     'warmup_epochs': 1,
     'lr': 3e-5,
     'weight_decay': 0,
     'schedulers': None,
-    'show_progress': False
+    'show_progress': True
 }
 
-root = '/scratch/jdt0025/erie_data'
+root = 'D:\\Big_Data'
 
-model = transformers.Swinv2ForImageClassification.from_pretrained(config['model_path'])
+# model = transformers.Swinv2ForImageClassification.from_pretrained(config['model_path'])
 # model = transformers.ViTForImageClassification.from_pretrained(config['model_path'])
-model.classifier = nn.Linear(768, 2)
+model = timm.create_model('vit_base_patch16_224', pretrained=True)
+model.head = nn.Linear(768, 2)
+
 
 optim = Adam(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
 

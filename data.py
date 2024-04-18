@@ -41,12 +41,14 @@ class ErieParcels(Dataset):
             self.df = self.df[self.df['classification'] != 'F']
 
         self.augment = T.Compose([
-            T.RandomCrop(img_dim),
+            T.Resize(img_dim),
+            T.ToTensor(),
+            T.RandomCrop(img_dim), # Not doing anything
             T.RandomHorizontalFlip(),
             T.ColorJitter()
         ])
 
-        self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
+        # self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
     
     def __len__(self):
         return len(self.df)
@@ -56,13 +58,14 @@ class ErieParcels(Dataset):
         parcel_number = str(row['parcel_number'])
         img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
         # img = self.preprocess(img)
-        img = self.swin_processor(img, return_tensors='pt')
+        # img = self.swin_processor(img, return_tensors='pt')
         
         homestread_status = 1 if row['homestead_status'] == 'Inactive' else 0
         year = row['year_built']
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
-        return self.augment(img.pixel_values.squeeze()), homestread_status
+        # return self.augment(img.pixel_values.squeeze()), homestread_status
+        return self.augment(img), homestread_status
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):

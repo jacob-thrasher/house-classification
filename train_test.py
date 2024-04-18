@@ -78,10 +78,10 @@ def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, ac
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
 
-        out = model(X).logits
+        # out = model(X).logits
+        out = model(X)
         # loss = loss_fn(out.logits.squeeze(), y)
         loss = loss_fn(out.squeeze(), y)
-        print(loss)
         loss.backward()
 
         epoch_loss += loss.item()
@@ -110,7 +110,8 @@ def test_step(model, dataloader, loss_fn, device, show_progress=True):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
-        out = model(X).logits
+        # out = model(X).logits
+        out = model(X)
 
         loss = loss_fn(out.squeeze(), y)
 
