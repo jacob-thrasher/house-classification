@@ -57,15 +57,15 @@ for X, _, parcel_number in tqdm(dataset):
         overlap_checking.append(mask)
         mask = mask * (categories.index(category['label']) + 1)
         all_masks.append(mask)
-
     if np.max(sum(overlap_checking)) > 1: raise ValueError('Found overlapping masks!!!')
 
     summed_masks = sum(all_masks)
     if np.max(summed_masks) > 20: raise ValueError("")
     summed_masks_normalized = summed_masks / 20 # number of classes
+
     pil_img = Image.fromarray(summed_masks_normalized*255).convert('RGB')
 
-    pil_img.save(os.path.join(root, f'masksval/{parcel_number}.png'))
+    pil_img.save(os.path.join(root, f'masksval_224/{parcel_number}.png'))
 
 
 

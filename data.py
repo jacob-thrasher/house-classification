@@ -67,7 +67,7 @@ class ErieParcels(Dataset):
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
         # return self.augment(img.pixel_values.squeeze()), homestread_status
-        return img, homestread_status, parcel_number
+        return T.functional.resize(img, (224, 224)), homestread_status, parcel_number
 
 class ZillowSupervised(Dataset):
     def __init__(self, root, files, csvpath, img_dim=224):
