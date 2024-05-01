@@ -42,10 +42,10 @@ class ErieParcels(Dataset):
             self.df = self.df[self.df['classification'] != 'F']
 
         self.augment = T.Compose([
-            T.Resize(img_dim),
+            T.Resize((img_dim, img_dim)),
             T.ToTensor(),
-            T.RandomCrop(img_dim), # Not doing anything
-            T.RandomHorizontalFlip(),
+            # T.RandomCrop(img_dim), # Not doing anything
+            # T.RandomHorizontalFlip(),
             T.ColorJitter()
         ])
 

@@ -2,7 +2,10 @@ import os
 import numpy as np
 import torch
 import timm
+import matplotlib.pyplot as plt
+import pprint
 from collections import OrderedDict
+from tqdm import tqdm
 from PIL import Image
 from torchmetrics.classification import BinaryJaccardIndex
 from pytorch_grad_cam.utils.image import show_cam_on_image
@@ -35,7 +38,7 @@ def load_batch_mask(root, mask_ids):
     return masks
 
 root = '/home/jacob/Documents/data/erie_data'
-val_masks = os.path.join(root, 'masksval')
+val_masks = os.path.join(root, 'masksval_224')
 pretrained_model_path = 'best_model.pt'
 
 categories = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 
@@ -43,7 +46,8 @@ categories = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic 
 
 
 val_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erieval.csv'), year_regression=False, model_path=None, return_id=True)
-dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=False)  
+dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=False)
+total_images = len(val_dataset)  
 
 model = timm.create_model('vit_base_patch16_224', pretrained=True)
 model.head = torch.nn.Linear(768, 2)
@@ -58,34 +62,66 @@ for key in state_dict:
     new_dict[key] = value
 model.load_state_dict(new_dict)
 model.eval()
-
-imgs, _, parcel_numbers = next(iter(dataloader))
-imgs = imgs.to('cuda')
 model.to('cuda')
 
 cam = GradCAM(model=model, target_layers=[model.blocks[-1].norm1], reshape_transform=reshape_transform)
 target = None
-grayscale_cam = cam(input_tensor=imgs, targets=target)
-
-imgs = imgs.cpu()
-
-threshold = .5
-pred = grayscale_cam[1, :]
-print(pred.shape)
-
-matric = BinaryJaccardIndex(threshold=0.5)
-
-masks = load_batch_mask(val_masks, parcel_numbers)
 
 scores = {}
-for i in range(len(categories)):
-    category = categories[i]
-    
-    # Build category mask
-    category_masks = []
-    for m in masks:
-        print(m.shape)
-        m = m[m == i]
-        print(m.shape)
-        
-    break
+for c in categories: scores[c] = 0
+
+for imgs, _, parcel_numbers in tqdm(dataloader):
+    imgs = imgs.to('cuda')
+
+    grayscale_cam = cam(input_tensor=imgs, targets=target)
+
+    imgs = imgs.cpu()
+    masks = load_batch_mask(val_masks, parcel_numbers)
+
+
+    for mask, attn, img in zip(masks, grayscale_cam, imgs):
+        # Check if house in mask
+        unique, counts = np.unique(mask, return_counts=True)
+        cat_counts = dict(zip(unique, counts))
+        if 3 not in list(cat_counts.keys()): # Building
+            total_images -= 1
+            continue # Skip if no buildling
+
+        # print(np.min(mask))
+        # plt.imshow(mask)
+        # plt.savefig('test_imgs/mask.png')
+        # plt.close()
+
+        for i in range(len(categories)):
+            category = categories[i]
+            category_mask = mask.copy()
+
+            category_mask = np.where(category_mask == (i+1), category_mask, 0)
+            category_mask /= (i+1) # Set values to 1
+
+
+            # plt.imshow(category_mask, cmap='jet')
+            # plt.savefig(f'test_imgs/{category}_mask.png')
+            # plt.close()
+
+            weighted_sum = np.sum(attn * category_mask)
+            total_nonzero = np.count_nonzero(category_mask)
+
+            if total_nonzero > 0:
+                normalized_sum = weighted_sum / total_nonzero
+            else: normalized_sum = 0
+
+            scores[category] += normalized_sum
+
+            # plt.imshow(img.permute(1, 2, 0))
+            # plt.imshow(attn*category_mask, cmap='jet', alpha=0.7)
+            # plt.savefig(f'test_imgs/{category}.png')
+            # plt.close()
+
+# Average scores
+for key in scores: scores[key] /= total_images
+total_skipped = len(val_dataset) - total_images
+print("Total images skipped:", total_skipped)
+
+scores = dict(sorted(scores.items(), key=lambda item: item[1]))
+pprint.pp(scores)
