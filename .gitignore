@@ -7,3 +7,7 @@ vit*
 sim*
 metrics
 *.pt
+test_imgs
+metrics
+paper
+cv_*

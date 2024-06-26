@@ -14,28 +14,19 @@ import pandas as pd
 import random
 import math
 
-def get_train_test(root, csvpath, test_split=.1):
-    df = pd.read_csv(csvpath)
-    files = list(df['file'])
-    random.shuffle(files)
-    files.remove('file')
-    test_size = int(len(files) * test_split)
-    
-    train_files = files[test_size:]
-    test_files = files[:test_size]
-
-    train_dataset = ZillowSupervised(root, train_files, csvpath)
-    test_dataset = ZillowSupervised(root, test_files, csvpath)
-    return train_dataset, test_dataset
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, model_path="swinv2-tiny-patch4-window8-256", return_id=False):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, split=None, return_id=False):
+        assert split in ['Active', 'Inactive', None], f'Expected split to be in [Active, Inactive], got {split}'
+
         self.dataroot = dataroot
         self.df = pd.read_csv(csvpath)
         self.return_id = return_id
 
-        self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
+        valid_parcels = [x.split('.')[0] for x in os.listdir(dataroot)]
+        self.df = self.df.loc[self.df['parcel_number'].isin(valid_parcels)]
 
+        if split: self.df = self.df[self.df['homestead_status'] == split]
         if year_regression: self.df = self.df[~self.df['year_built'].isna()]
         else:
             self.df = self.df[self.df['classification'] != 'E']
@@ -44,9 +35,10 @@ class ErieParcels(Dataset):
         self.augment = T.Compose([
             T.Resize((img_dim, img_dim)),
             T.ToTensor(),
+            T.Normalize((0), (1))
             # T.RandomCrop(img_dim), # Not doing anything
             # T.RandomHorizontalFlip(),
-            T.ColorJitter()
+            # T.ColorJitter()
         ])
 
         # self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
@@ -57,7 +49,7 @@ class ErieParcels(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         parcel_number = str(row['parcel_number'])
-        img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
+        img = Image.open(os.path.join(self.dataroot, f'{parcel_number}.png')).convert("RGB")
         # img = self.preprocess(img)
         # img = self.swin_processor(img, return_tensors='pt')
         
@@ -68,104 +60,44 @@ class ErieParcels(Dataset):
         # return self.augment(img.pixel_values.squeeze()), homestread_status
         if self.return_id: return self.augment(img), homestread_status, parcel_number
         return self.augment(img), homestread_status
-
-class ZillowSupervised(Dataset):
-    def __init__(self, root, files, csvpath, img_dim=224):
-        preprocess = T.Compose([
-            T.Resize(img_dim),file
-        ])
-
+        # return img, homestread_status
+    
+class ErieParcels_top4s(Dataset):
+    def __init__(self, dataroot, csvpath, img_dim=224, split=None):
+        self.dataroot = dataroot
         self.df = pd.read_csv(csvpath)
-        self.imgs = []
-        self.files = files
-        for file in tqdm(self.files):
-            img = Image.open(os.path.join(root, file)).convert("RGB")
-            img = preprocess(img)
-            self.imgs.append(img)
-    
-    def __len__(self):
-        return len(self.imgs)
-    
-    def __getitem__(self, idx):
-        img = self.imgs[idx]
 
-        key = self.files[idx]
-        label = self.df[self.df['file'] == key].reset_index()['label'][0] # There is def a better way to do this
-        return img, int(label)
+        if split: self.df = self.df[self.df['homestead_status'] == split]
 
-class ZillowUnsupervised(Dataset):
-    def __init__(self, root, img_dim=224):
+        valid_parcels = [x.split('.')[0] for x in os.listdir(dataroot)]
+        self.df = self.df.loc[self.df['parcel_number'].isin(valid_parcels)]
+        # self.df = self.df.loc[self.df['parcel_number'].isin(os.listdir(dataroot))]
 
-        self.preprocess = T.Compose([
-            T.Resize(img_dim),
-            T.CenterCrop(img_dim),
+        self.augment = T.Compose([
+            T.Resize((img_dim, img_dim)),
             T.ToTensor(),
-            T.Normalize((.5, .5, .5), (.5, .5, .5))
+            T.Normalize((0), (1))
         ])
-        self.root = root
-        self.files = os.listdir(root)
+
     
     def __len__(self):
-        return len(self.files)
+        return len(self.df)
     
     def __getitem__(self, idx):
-        img = Image.open(os.path.join(self.root, self.files[idx])).convert('RGB')
-        return self.preprocess(img), self.files[idx]
-    
-def cluster(root, n=2):
-    dataset = ZillowUnsupervised(root)
+        row = self.df.iloc[idx]
+        parcel_number = str(row['parcel_number'])
+        # img = Image.open(os.path.join(self.dataroot, parcel_number, '0.png')).convert("RGB")
+        img = Image.open(os.path.join(self.dataroot, f'{parcel_number}.png')).convert("RGB")
 
-    # Temp soln
-    imgs = []
-    for i in range(0, 500):
-        img, name = dataset[i]
-        imgs.append(img)
-    imgs = torch.stack(imgs).to('cuda')
+        homestead_status = 1 if row['homestead_status'] == 'Inactive' else 0
 
-    inception = timm.create_model('inception_v4', pretrained=True).to('cuda')
-    embeddings = inception(imgs)
+        top4 = [row['top1'], row['top2'], row['top3'], row['top4']]
 
-    kmeans = KMeans(n_clusters=2, init='random')    
-    print("Fitting data")
-    kmeans.fit(embeddings.cpu())
+        info = {
+            'homestead_status': homestead_status,
+            'parcel_number': parcel_number,
+            'top4': top4
+        }
 
-    print("Making predictions")
-    Z = kmeans.predict(imgs)
-
-    plot_clusters(Z, imgs)
-
-def plot_clusters(Z, data):
-    for i in range(0,2):
-        row = np.where(Z==i)[0]  # row in Z for elements of cluster i
-        num = row.shape[0]       #  number of elements for each cluster
-        r = np.floor(num/10.)    # number of rows in the figure of the cluster 
-
-        print("cluster "+str(i))
-        print(str(num)+" elements")
-
-        plt.figure(figsize=(10,10))
-        for k in range(0, num):
-            plt.subplot(r+1, 10, k+1)
-            image = data[row[k], ]
-            image = image.reshape(8, 8)
-            plt.imshow(image, cmap='gray')
-            plt.axis('off')
-        plt.show()
-
-# cluster('D:\\Big_Data\\zillow_images')
-
-# inception = timm.create_model('inception_v4', pretrained=True)
-# inception.last_linear = nn.Identity()
-# print(inception)
-
-# root = 'D:\\Big_Data\\zillow_images'
-# csvpath = 'labels.csv'
-
-# train_dataset, test_datset = get_train_test(root, csvpath)
-
-# # print(len(train_dataset), len(test_datset))
-# img, label = train_dataset[0]
-
-# print(label)
-# plt.imshow(img.permute(1, 2, 0))
-# plt.show()
+        return self.augment(img), info
+        # return T.functional.resize(img, (224, 224)), info

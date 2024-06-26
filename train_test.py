@@ -4,7 +4,6 @@ from torch.optim import Adam, SGD, RMSprop
 from torch.utils.data import DataLoader
 import time
 import matplotlib.pyplot as plt
-from data import get_train_test
 import torchmetrics.functional as tmf
 import os
 from torchvision import models
@@ -121,17 +120,19 @@ def test_step(model, dataloader, loss_fn, device, show_progress=True):
     prediction = torch.argmax(out, dim=1)
     acc = tmf.classification.accuracy(prediction, y, task='binary').cpu()
     f1 = tmf.f1_score(prediction, y, task='binary').cpu()
+    prec = tmf.precision(prediction, y, task='binary').cpu()
+    recall = tmf.recall(prediction, y, task='binary').cpu()
 
-    return running_loss / len(dataloader), acc, f1
+    return running_loss / len(dataloader), acc, f1, prec, recall
 
 def train(train_dataloader, test_dataloader, model, optim, config):
     
     model_name = config['model_name']
-    if not os.path.exists(model_name):
-        os.mkdir(model_name)
+    dst = config['dst']
+    if not os.path.exists(os.path.join(dst, model_name)):
+        os.mkdir(os.path.join(dst, model_name))
     else:
-        print("MODEL ALREADY EXISTS")
-        return
+        raise OSError('MODEL ALREADY EXISTS')
 
     # model = SimpleCNN()
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
@@ -155,30 +156,49 @@ def train(train_dataloader, test_dataloader, model, optim, config):
     loss_fn = nn.CrossEntropyLoss()
     # loss_fn = nn.MSELoss()
 
+    best_f1 = 0
     best_acc = 0
     epochs = config['epochs']
     # loop
+    valid_metrics = {
+        'acc': [],
+        'f1': [],
+        'prec': [],
+        'recall': []
+    }
+    best_metrics = {
+        'acc': 0,
+        'f1': 0,
+        'prec': 0,
+        'recall': 0
+    }
     train_losses = []
     valid_losses = []
-    valid_accs = []
-    valid_f1s = []
     optim_lrs = []
     for epoch in range(epochs):
         start = time.time()
         train_loss, lrs = train_step(model, train_dataloader, optim, loss_fn, device, show_progress=config['show_progress'], schedulers=config['schedulers'], accum_iter=config['accum_iter'])
-        valid_loss, valid_acc, valid_f1 = test_step(model, test_dataloader, loss_fn, device, show_progress=config['show_progress'])
+        valid_loss, valid_acc, valid_f1, valid_prec, valid_recall = test_step(model, test_dataloader, loss_fn, device, show_progress=config['show_progress'])
         end = time.time()
 
 
         print(f'Epoch {epoch}/{epochs}:\nAvg Train Loss: {train_loss}\nAvg Valid Loss: {valid_loss}, Acc: {valid_acc}, F1 : {valid_f1}\nEpoch Time: {end - start}s\n')
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
-        valid_accs.append(valid_acc)
-        valid_f1s.append(valid_f1)
+        valid_metrics['acc'].append(valid_acc)
+        valid_metrics['f1'].append(valid_f1)
+        valid_metrics['prec'].append(valid_prec)
+        valid_metrics['recall'].append(valid_recall)
         optim_lrs += lrs
 
-        if valid_acc > best_acc:
-            torch.save(model.state_dict(), f'{model_name}/best_model.pt')
+        if valid_acc > best_metrics['acc']:
+            torch.save(model.state_dict(), f'{dst}/{model_name}/best_model.pt')
+            best_metrics = {
+                'acc': valid_acc,
+                'f1': valid_f1,
+                'prec': valid_prec,
+                'recall': valid_recall
+            }
 
         plt.figure()
         plt.plot(train_losses, label='Train loss', color='green')
@@ -187,17 +207,17 @@ def train(train_dataloader, test_dataloader, model, optim, config):
         plt.ylabel("Loss")
         plt.title("Loss over time")
         plt.legend(loc='upper center')
-        plt.savefig(os.path.join(model_name, f'loss.png'))
+        plt.savefig(os.path.join(dst, model_name, f'loss.png'))
         plt.close()
 
         plt.figure()
-        plt.plot(valid_accs, label='Accuracy', color='green')
-        plt.plot(valid_f1s, label='F1 score', color='red')    
+        plt.plot(valid_metrics['acc'], label='Accuracy', color='green')
+        plt.plot(valid_metrics['f1'], label='F1 score', color='red')    
         plt.xlabel("epochs")
         plt.ylabel("Score")
         plt.title("Validation accuracy and F1 over time")
         plt.legend(loc='lower right')
-        plt.savefig(os.path.join(model_name, f'accf1.png'))
+        plt.savefig(os.path.join(dst, model_name, f'accf1.png'))
         plt.close()
 
         plt.figure()
@@ -206,5 +226,7 @@ def train(train_dataloader, test_dataloader, model, optim, config):
         plt.ylabel("Learning rate")
         plt.title("Scheduled learning rate")
         plt.legend(loc='lower right')
-        plt.savefig(os.path.join(model_name, f'lr.png'))
+        plt.savefig(os.path.join(dst, model_name, f'lr.png'))
         plt.close()
+
+    return best_metrics
