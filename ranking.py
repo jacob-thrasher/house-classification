@@ -31,7 +31,7 @@ threshold = 0
 ##########
 
 root = 'D:\\Big_Data\\Erie'
-val_masks = os.path.join(root, 'masks/cv0_top4s')
+val_masks = os.path.join(root, 'masks/models/upernet')
 pretrained_model_path = 'paper/ViT/best_model.pt'
 model_path = 'vit_base_patch16_224'
 

@@ -105,6 +105,10 @@ def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, ac
 def test_step(model, dataloader, loss_fn, device, show_progress=True):
     model.eval()
     running_loss = 0
+    acc = 0
+    prec = 0
+    f1 = 0
+    recall = 0
     for (X, y) in tqdm(dataloader, disable=(not show_progress)):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
@@ -117,13 +121,14 @@ def test_step(model, dataloader, loss_fn, device, show_progress=True):
         running_loss += loss.item()
 
 
-    prediction = torch.argmax(out, dim=1)
-    acc = tmf.classification.accuracy(prediction, y, task='binary').cpu()
-    f1 = tmf.f1_score(prediction, y, task='binary').cpu()
-    prec = tmf.precision(prediction, y, task='binary').cpu()
-    recall = tmf.recall(prediction, y, task='binary').cpu()
+        prediction = torch.argmax(out, dim=1)
+        print(prediction)
+        acc += tmf.classification.accuracy(prediction, y, task='binary').cpu()
+        f1 += tmf.f1_score(prediction, y, task='binary').cpu()
+        prec += tmf.precision(prediction, y, task='binary').cpu()
+        recall += tmf.recall(prediction, y, task='binary').cpu()
 
-    return running_loss / len(dataloader), acc, f1, prec, recall
+    return running_loss / len(dataloader), acc / len(dataloader), f1 / len(dataloader), prec / len(dataloader), recall / len(dataloader)
 
 def train(train_dataloader, test_dataloader, model, optim, config):
     

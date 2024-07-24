@@ -11,3 +11,6 @@ test_imgs
 metrics
 paper
 cv_*
+exp
+folds
+folds_2

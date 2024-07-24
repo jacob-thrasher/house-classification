@@ -85,6 +85,7 @@ def reshape_transform(tensor, height=14, width=14):
 
 def load_mask(mask_path):
     img = Image.open(mask_path).convert('L')
+    img = img.resize((224, 224))
     test = np.array(img)
     img = np.round((np.array(img) / 255) * 20)
     img = np.reshape(img, (224, 224)) # PROBABLY UNSAFE

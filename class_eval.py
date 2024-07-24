@@ -19,9 +19,10 @@ from train_test import test_step
 
 root = 'D:\\Big_Data\\Erie'
 model_path = 'vgg16.tv_in1k'
+
 pretrained_model_path = 'cv_0/VGG16/best_model.pt' #os.path.join(root, 'best_model.pt')
 
-val_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'cv/0/test.csv'), return_id=True)
+val_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'cv/0/test.csv'), return_id=True, split=None)
 total_images = len(val_dataset)  
 
 model = timm.create_model(model_path, pretrained=True)
@@ -51,37 +52,39 @@ model.to('cuda')
 model.eval()
 
 
-val_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'erieval.csv'), year_regression=False)
 val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False) 
 
-_, acc, f1, prec, recall = test_step(model, val_dataloader, nn.CrossEntropyLoss(), 'cuda', show_progress=True)
+# _, acc, f1, prec, recall = test_step(model, val_dataloader, nn.CrossEntropyLoss(), 'cuda', show_progress=False)
 
-print("Accuracy : ", acc.item())
-print("Precision: ", prec.item())
-print("Recall   : ", recall.item())
-print("F1 score : ", f1.item())
+# print("Accuracy : ", acc.item())
+# print("Precision: ", prec.item())
+# print("Recall   : ", recall.item())
+# print("F1 score : ", f1.item())
 
 
-# out = {
-#     'TP': [],
-#     'TN': [],
-#     'FP': [],
-#     'FN': []
-# }
-# for X, y, _id in tqdm(val_dataset):
-#     X = X.to('cuda')
-#     pred = model(X.unsqueeze(0)).squeeze()
+out = {
+    'TP': [],
+    'TN': [],
+    'FP': [],
+    'FN': []
+}
+for X, y, _id in tqdm(val_dataset):
+    X = X.to('cuda')
+    pred = model(X.unsqueeze(0)).squeeze()
 
-#     pred = torch.argmax(torch.nn.functional.softmax(pred.cpu(), dim=0)).item()
+    pred = torch.argmax(torch.nn.functional.softmax(pred.cpu(), dim=0)).item()
 
-#     if pred == 1 and y == 1:
-#         out['TP'].append(_id)   
-#     elif pred == 0 and y == 0:
-#         out['TN'].append(_id)   
-#     elif pred == 1 and y == 0:
-#         out['FP'].append(_id)   
-#     elif pred == 0 and y == 1:
-#         out['FN'].append(_id)   
+    if pred == 1 and y == 1:
+        out['TP'].append(_id)   
+    elif pred == 0 and y == 0:
+        out['TN'].append(_id)   
+    elif pred == 1 and y == 0:
+        out['FP'].append(_id)   
+    elif pred == 0 and y == 1:
+        out['FN'].append(_id)   
+
+for key in out:
+    print(key, len(out[key]))
 
 
 

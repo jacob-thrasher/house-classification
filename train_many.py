@@ -20,24 +20,27 @@ import transformers
 import random
 from torch.optim import Adam, SGD, AdamW
 
-torch.manual_seed(69)   
-np.random.seed(69)
-random.seed(69)
+seed = 99
+torch.manual_seed(seed)   
+np.random.seed(seed)
+random.seed(seed)
 
 
 root = '/home/jacob/Documents/data/erie_data'
-model_path = "microsoft/swinv2-tiny-patch4-window8-256"
+model_path = 'vit_base_patch16_224'
 
-train_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erietrain.csv'), year_regression=False, model_path=model_path)
-val_dataset = ErieParcels(os.path.join(root, 'parcels'), os.path.join(root, 'erieval.csv'), year_regression=False, model_path=model_path)
+for i in range(4, 5):
+
+    train_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, f'cv/{i}/train.csv'), year_regression=False)
+    val_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, f'cv/{i}/test.csv'), year_regression=False)
 
 
-model = transformers.Swinv2ForImageClassification.from_pretrained(model_path)
-model.classifier = nn.Linear(768, 2)
+    model = timm.create_model(model_path, pretrained=True)
+    model.head = nn.Linear(768, 2)
 
-print("STARTING MODEL 1")
-optim = AdamW(model.parameters(), lr=3e-5)
-train(train_dataset, val_dataset, model, optim, model_name='swin_adamW3e-5', epochs=25, show_progress=True)
+    print(f"STARTING FOLD {i}")
+    optim = Adam(model.parameters(), lr=3e-5)
+    train(train_dataset, val_dataset, model, optim, model_name='swin_adamW3e-5', epochs=25, show_progress=True)
 
 # print("STARTING MODEL 2")
 # optim = Adam(model.parameters(), lr=3e-5, weight_decay=0)
