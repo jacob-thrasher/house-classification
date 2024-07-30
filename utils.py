@@ -5,9 +5,12 @@ import torchmetrics
 import torch
 import matplotlib.pyplot as plt
 import torchmetrics.functional as tmf
+import timm
+from torch import nn
 from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
 from PIL import Image
+from collections import OrderedDict
 
 def plot_confusion_matrix(pred, labels, classes):
     cm = confusion_matrix(labels, pred)
@@ -117,22 +120,6 @@ def precision_at_k(scores, k, relevant_items):
 
     return len(matches) / k
 
-# def mean_average_precision(scores, k, relevant_items, threshold=0.001):
-#     ranked_items, ranked_values = get_sorted_scores(scores)
-#     threshold_values = [x for x in ranked_values if x >= threshold]
-
-#     if len(threshold_values) < k: k = len(threshold_values)
-#     top_k = ranked_items[:k]
-
-#     all_precisions = []
-#     for i, item in enumerate(top_k):
-#         if item in relevant_items:
-#             precision = precision_at_k(scores, i+1, relevant_items)
-#             all_precisions.append(precision)
-
-#     if len(all_precisions) > 0:
-#         return sum(all_precisions) / len(all_precisions)
-#     return 0
 
 def get_retrieval_metrics(scores, relevent_items, k=4, threshold=0):
     ranked_items, ranked_values = get_sorted_scores(scores)
@@ -159,3 +146,121 @@ def NDCG(scores, relevent_items, k=4, threshold=0):
 
     return tmf.retrieval.retrieval_normalized_dcg(torch.tensor(ranked_values), torch.tensor(target_indicators), top_k=k)
 
+
+#########################
+# ACTIVE LEARNING UTILS #
+#########################
+
+def compute_uncertainty_scores(logits, method, temperature=1):
+    '''
+    Computes uncertainty scores, where higher values indicate higher uncertainty
+
+    Args:
+        logits: Model outputs (no softmax)
+        method: Uncertainty calculation method, where:
+                'least' = least confidence 
+                'entropy' = entropy sampling
+    '''
+    assert method in ['least', 'entropy', 'margin', 'ratio'], f'Expexted parameter method to be in [least, entropy, margin, ratio], got {method}'
+
+    # Apply softmax function
+    probs = nn.functional.softmax(logits, dim=1)
+    n_classes = probs.size()[1]
+    max_values = torch.max(probs, dim=1)
+    pred_class = max_values.indices
+
+    if method == 'least': # Least confidence
+        max_probs = max_values.values
+        # s = (1 - max_probs) * (n_classes / (n_classes-1))
+        s = 1 - max_probs
+
+    elif method == 'entropy':
+        s = -torch.sum(probs * torch.log2(probs), dim=1) / torch.log2(torch.tensor(n_classes))
+
+    elif method == 'margin':
+        top2 = torch.topk(probs, 2, dim=1).values
+        s = 1 - (top2[:, 0] - top2[:, 1])
+
+    elif method == 'ratio':
+        top2 = torch.topk(probs, 2, dim=1).values
+        s = -(top2[:, 0] / top2[:, 1])
+
+    return s.tolist(), pred_class.tolist()
+
+def undersample(path, pids, col='ID'):
+    '''
+    Undersamples datasets by transferring pids from validation set to training set
+
+    Args:
+        path: path to load/save csvs
+        pids: list of pids to transfer
+    
+    Keyword Args:
+        col: column to sample from
+    '''
+    al_train = pd.read_csv(os.path.join(path, 'train.csv'))
+    al_valid = pd.read_csv(os.path.join(path, 'valid.csv'))
+
+    transfer_rows = al_valid[al_valid[col].isin(pids)]
+    al_train = pd.concat([al_train, transfer_rows], ignore_index=True) # Move rows to train set
+    al_valid.drop(index=transfer_rows.index, inplace=True)
+
+    assert len(set(al_train[col].tolist()).intersection(set(al_valid[col].tolist()))) == 0, f'Found overlap in train and validation set!!'
+
+    al_train.to_csv(os.path.join(path, 'train.csv'), index=False)
+    al_valid.to_csv(os.path.join(path, 'valid.csv'), index=False)
+
+def update_splits(data_path, valid_dataloader, model_path, n_transfer=2, device='cuda', uncertainty='least'):
+    '''
+    Performs uncertainty calculations and updates train/validation csvs with most difficult subjects
+
+    Args:
+        validpath: path to validation dataset
+        model_path: path to model TODO: Refactor to infer model ppath from valid_path
+        n_transfer: number of subjects to transfer
+        device: operating device
+        uncertainty: method for computing uncertainty
+    '''
+
+    print('\nUpdating splits....')
+    # Load best model
+    model = timm.create_model('vit_base_patch16_224', pretrained=True)
+    model.head = nn.Linear(768, 2)
+
+    state_dict = torch.load(model_path)
+    new_dict = OrderedDict()
+    for key in state_dict:
+        value = state_dict[key]
+        if 'module' in key:
+            key = key.replace('module.', '')
+
+        new_dict[key] = value
+
+    model.load_state_dict(new_dict)
+    model.to(device)
+    model.eval()
+
+    # scaled_model = ModelWithTemperature(model)
+    # scaled_model.set_temperature(test_dataloader)
+
+    
+    uncertainty_df = pd.DataFrame(columns=['ID', 'label', 'Pred', 'Uncertainty'])
+    for X, y, pid in tqdm(valid_dataloader, disable=False):
+        X = X.to(device)
+        y = y.tolist()
+        pid = pid
+
+        out = model(X)
+
+        scores, preds = compute_uncertainty_scores(out, method=uncertainty, temperature=1)
+
+        # TODO: Get rid of this for loop
+        for p, s, _id, label in zip(preds, scores, pid, y):
+            uncertainty_df.loc[len(uncertainty_df)] = [_id, label, p, s]
+
+
+    uncertainty_df.sort_values(by='Uncertainty', ascending=False, inplace=True)
+
+    n_transfer = min(n_transfer, len(uncertainty_df))
+
+    undersample(data_path, uncertainty_df['ID'][:n_transfer].tolist(), col='parcel_number')

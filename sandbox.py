@@ -21,38 +21,22 @@ df1 = pd.read_csv(os.path.join(root, 'cv/0/train.csv'))
 df2 = pd.read_csv(os.path.join(root, 'cv/0/test.csv'))
 df = pd.concat([df1, df2])
 
-X = df['parcel_number'].tolist()
-y = df['homestead_status'].tolist()
+n_train = int(len(df) * 0.1)
+n_test = int(len(df) * 0.2)
 
-skf = StratifiedKFold(n_splits=5, random_state=69, shuffle=True)
+train = df.groupby('homestead_status', group_keys=False).apply(lambda x: x.sample(frac=0.1))
+df = df[~df['parcel_number'].isin(train['parcel_number'])]
 
-skf.get_n_splits(X, y)
+test = df.groupby('homestead_status', group_keys=False).apply(lambda x: x.sample(frac=0.2))
 
-X = np.array(X)
-y = np.array(y)
-for i, (train_index, test_index) in enumerate(skf.split(X, y)):
-    print(train_index)
-    X_train = X[train_index]
-    y_train = y[train_index]
+valid = df[~df['parcel_number'].isin(test['parcel_number'])]
 
-    X_test = X[test_index]
-    y_test = y[test_index]
-
-    os.mkdir(os.path.join(dst, str(i)))
-    train_df = pd.DataFrame(data={
-        'parcel_number': X_train,
-        'homestead_status': y_train
-    })
-    train_df.to_csv(os.path.join(dst, str(i), 'train.csv'))
-
-    test_df = pd.DataFrame(data={
-        'parcel_number': X_test,
-        'homestead_status': y_test
-    })
-    test_df.to_csv(os.path.join(dst, str(i), 'test.csv'))
+print(len(train), len(valid), len(test))
 
 
-
+train.to_csv(os.path.join(root, 'active_learning/train.csv'))
+valid.to_csv(os.path.join(root, 'active_learning/valid.csv'))
+test.to_csv(os.path.join(root, 'active_learning/test.csv'))
 
 # generator = pipeline('image-segmentation', model="nvidia/segformer-b1-finetuned-cityscapes-1024-1024", device=0)
 
