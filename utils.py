@@ -224,7 +224,7 @@ def update_splits(data_path, valid_dataloader, model_path, n_transfer=2, device=
 
     print('\nUpdating splits....')
     # Load best model
-    model = timm.create_model('vit_base_patch16_224', pretrained=True)
+    model = timm.create_model('vit_base_patch16_224', checkpoint_path='/users/jdt0025/timm_models/vit.pt')
     model.head = nn.Linear(768, 2)
 
     state_dict = torch.load(model_path)

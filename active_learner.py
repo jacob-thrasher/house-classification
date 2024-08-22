@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from utils import update_splits
 from train_test import train_step, test_step
 from collections import OrderedDict
+import transformers
 # from temp_scaling import ModelWithTemperature
 
 # models: 
@@ -26,22 +27,24 @@ from collections import OrderedDict
 
 torch.manual_seed(69)
 
-root = 'D:\\Big_Data\\Erie'
-exp_name = 'AL-least'
+root = '/users/jdt0025/scratch/Erie'
+exp_name = 'AL-margin2'
 dst = os.path.join('figures', exp_name)
-uncertainty = 'least'
-model_path = 'vit_base_patch16_224'
+uncertainty = 'margin'
+model_path = '/users/jdt0025/timm_models/vit.pt'
 
 if not os.path.exists(dst):
     # Prep files (altered AL csvs are saved for further analysis if necessary)
     os.mkdir(dst)
-    shutil.copy(os.path.join(root, 'active_learning/train.csv'), os.path.join(dst, f'train.csv'))
-    shutil.copy(os.path.join(root, 'active_learning/valid.csv'), os.path.join(dst, f'valid.csv'))
+    shutil.copy(os.path.join(root, 'active_learning/active_learning/train.csv'), os.path.join(dst, f'train.csv'))
+    shutil.copy(os.path.join(root, 'active_learning/active_learning/valid.csv'), os.path.join(dst, f'valid.csv'))
+    # shutil.copy('figures/AL-margin/train.csv', os.path.join(dst, f'train.csv'))
+    # shutil.copy('figures/AL-margin/valid.csv', os.path.join(dst, f'valid.csv'))
 else:
     raise OSError(f'Directory {dst} already exists')
 
 dim = 224
-al_iter = 50
+al_iter = 25
 n_transfer = 200
 lr = 3e-5
 epochs = 5
@@ -57,29 +60,30 @@ for i in range(al_iter):
     os.mkdir(os.path.join(dst, f'iter_{i}'))
 
 
+
     train_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(dst, f'train.csv'), year_regression=False, return_id=True)
-    test_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, f'active_learning/test.csv'), year_regression=False, return_id=True)
+    test_dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, f'active_learning/active_learning/test.csv'), year_regression=False, return_id=True)
 
     train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
     print(len(train_dataset), len(test_dataset))
 
 
-    model = timm.create_model(model_path, pretrained=True)
+    model = timm.create_model('vit_base_patch16_224', checkpoint_path=model_path)
+    model.head = nn.Linear(768, 2)
 
-
-    if model_path == 'vgg16.tv_in1k':
-        model.head.fc = nn.Sequential(nn.Linear(4096, 1000), 
-                                    nn.ReLU(),
-                                    nn.Linear(1000, 2))
-    elif model_path == 'resnet50.a1_in1k':
-        model.fc = nn.Sequential(nn.Linear(2048, 1000), 
-                                nn.ReLU(),
-                                nn.Linear(1000, 2))
-    elif model_path == 'vit_base_patch16_224':
-        model.head = nn.Linear(768, 2)
-    elif model_path == 'swin_large_patch4_window7_224.ms_in22k':
-        model.head.fc = nn.Linear(1536, 2)
+    # if model_path == 'vgg16.tv_in1k':
+    #     model.head.fc = nn.Sequential(nn.Linear(4096, 1000), 
+    #                                 nn.ReLU(),
+    #                                 nn.Linear(1000, 2))
+    # elif model_path == 'resnet50.a1_in1k':
+    #     model.fc = nn.Sequential(nn.Linear(2048, 1000), 
+    #                             nn.ReLU(),
+    #                             nn.Linear(1000, 2))
+    # elif model_path in ['vit_base_patch16_224', '/users/jdt0025/hf_models/vit-base-patch16-224']: # TODO: Fix this obviously
+    #     model.head = nn.Linear(768, 2)
+    # elif model_path == 'swin_large_patch4_window7_224.ms_in22k':
+    #     model.head.fc = nn.Linear(1536, 2)
 
     device = 'cuda'
     print(f'Using {device}')

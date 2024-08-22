@@ -16,7 +16,7 @@ import math
 
 
 class ErieParcels(Dataset):
-    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, split=None, return_id=False):
+    def __init__(self, dataroot, csvpath, img_dim=224, year_regression=False, split=None, return_id=False, processor=None):
         assert split in ['Active', 'Inactive', None], f'Expected split to be in [Active, Inactive], got {split}'
 
         self.dataroot = dataroot
@@ -32,14 +32,18 @@ class ErieParcels(Dataset):
         #     self.df = self.df[self.df['classification'] != 'E']
         #     self.df = self.df[self.df['classification'] != 'F']
 
-        self.augment = T.Compose([
-            T.Resize((img_dim, img_dim)),
-            T.ToTensor(),
-            T.Normalize((0), (1))
-            # T.RandomCrop(img_dim), # Not doing anything
-            # T.RandomHorizontalFlip(),
-            # T.ColorJitter()
-        ])
+        if processor:
+            self.processor = processor
+        else:
+            self.processor = T.Compose([
+                T.Resize((img_dim, img_dim)),
+                T.ToTensor(),
+                T.Normalize((0), (1))
+                # T.RandomCrop(img_dim), # Not doing anything
+                # T.RandomHorizontalFlip(),
+                # T.ColorJitter()
+            ])
+
 
         # self.swin_processor = transformers.AutoImageProcessor.from_pretrained(model_path)
     
@@ -58,8 +62,9 @@ class ErieParcels(Dataset):
         # return img, math.floor(abs(float(year)))
         # return img, int(abs(float(year)) > 1971)
         # return self.augment(img.pixel_values.squeeze()), homestread_status
-        if self.return_id: return self.augment(img), homestread_status, parcel_number
-        return self.augment(img), homestread_status
+        if self.return_id: return self.processor(img), homestread_status, parcel_number
+        # if self.return_id: return img, homestread_status, parcel_number
+        return self.processor(img), homestread_status
         # return img, homestread_status
     
 class ErieParcels_top4s(Dataset):

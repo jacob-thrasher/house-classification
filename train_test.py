@@ -72,7 +72,7 @@ def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, ac
     epoch_loss = 0
     lrs = []
 
-    for batch, (X, y, _) in enumerate(tqdm(dataloader, disable=(not show_progress))):
+    for batch, (X, y) in enumerate(tqdm(dataloader, disable=(not show_progress))):
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
@@ -105,11 +105,11 @@ def train_step(model, dataloader, optim, loss_fn, device, show_progress=True, ac
 def test_step(model, dataloader, loss_fn, device, show_progress=True):
     model.eval()
     running_loss = 0
-    acc = 0
-    prec = 0
-    f1 = 0
-    recall = 0
-    for (X, y, _) in tqdm(dataloader, disable=(not show_progress)):
+    predictions = []
+    labels = []
+    for (X, y) in tqdm(dataloader, disable=(not show_progress)):
+        labels += y.tolist()
+
         X = X.to(device)
         # y = y.type(torch.float32).to(device)
         y = y.to(device)
@@ -121,13 +121,16 @@ def test_step(model, dataloader, loss_fn, device, show_progress=True):
         running_loss += loss.item()
 
 
-        prediction = torch.argmax(out, dim=1)
-        acc += tmf.classification.accuracy(prediction, y, task='binary').cpu().item()
-        f1 += tmf.f1_score(prediction, y, task='binary').cpu().item()
-        prec += tmf.precision(prediction, y, task='binary').cpu().item()
-        recall += tmf.recall(prediction, y, task='binary').cpu().item()
+        predictions += torch.argmax(out, dim=1).cpu().tolist()
 
-    return running_loss / len(dataloader), acc / len(dataloader), f1 / len(dataloader), prec / len(dataloader), recall / len(dataloader)
+    predictions = torch.tensor(predictions)
+    labels = torch.tensor(labels)
+    acc = tmf.classification.accuracy(predictions, labels, task='binary').item()
+    f1 = tmf.f1_score(predictions, labels, task='binary').item()
+    prec = tmf.precision(predictions, labels, task='binary').item()
+    recall = tmf.recall(predictions, labels, task='binary').item()
+
+    return running_loss / len(dataloader), acc, f1, prec, recall
 
 def train(train_dataloader, test_dataloader, model, optim, config):
     

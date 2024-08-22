@@ -37,10 +37,11 @@ def show_masks_on_image(raw_image, masks):
   del mask
   gc.collect()
 
-root = 'D:\\Big_Data\\Erie'
+root = '/users/jdt0025/scratch/Erie'
+al_method = 'least'
 
 
-dataset = ErieParcels_top4s(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'cv/0/top-4s.csv'), split=None)
+dataset = ErieParcels(os.path.join(root, 'parcels_cleaned'), os.path.join(root, f'active_learning/active_learning/test.csv'), return_id=True, split=None)
 dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
 
 generator = pipeline('image-segmentation', model="nvidia/segformer-b1-finetuned-cityscapes-1024-1024", device=0)
@@ -51,8 +52,8 @@ categories = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic 
 
 
 confirmed = []
-for X, info in tqdm(dataset, disable=False):
-    parcel_number = info['parcel_number']
+for X, label, parcel_number in tqdm(dataset, disable=False):
+    parcel_number = parcel_number
     outputs = generator(X, points_per_batch=64)
     overlap_checking = []
     all_masks = []
@@ -72,7 +73,7 @@ for X, info in tqdm(dataset, disable=False):
 
 
     pil_img = Image.fromarray(summed_masks_normalized*255).convert('RGB')
-    pil_img.save(os.path.join(root, f'masks/cv0_top4s/{parcel_number}.png'))
+    pil_img.save(os.path.join(root, f'active_learning/masks/{parcel_number}.png'))
 
 
 

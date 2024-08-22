@@ -30,21 +30,22 @@ threshold = 0
 
 ##########
 
-root = 'D:\\Big_Data\\Erie'
-val_masks = os.path.join(root, 'masks/models/upernet')
-pretrained_model_path = 'paper/ViT/best_model.pt'
+root = '/users/jdt0025/scratch/Erie'
+val_masks = os.path.join(root, 'active_learning/masks')
+pretrained_model_path = 'figures/AL-entropy/iter_45/best_model.pt'
 model_path = 'vit_base_patch16_224'
+model_checkpoint = '/users/jdt0025/timm_models/vit.pt'
 
 # categories = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 
 #             'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle']
 static_categories = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky']
 
 
-val_dataset = ErieParcels_top4s(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'cv/0/top-4s.csv'), split=split)
+val_dataset = ErieParcels_top4s(os.path.join(root, 'parcels_cleaned'), os.path.join(root, 'active_learning/active_learning/top-4s.csv'), split=split)
 dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=4, shuffle=False, drop_last=True)
 total_images = len(val_dataset)  
 
-model = timm.create_model(model_path, pretrained=True)
+model = timm.create_model(model_path, checkpoint_path=model_checkpoint)
 
 if model_path == 'vgg16.tv_in1k':
     model.head.fc = nn.Sequential(nn.Linear(4096, 1000), 
@@ -73,7 +74,7 @@ model.load_state_dict(new_dict)
 model.eval()
 model.to('cuda')
 
-cam = EigenCAM(model=model, target_layers=target_layers, reshape_transform=reshape_transform) # Reshape transform for ViT
+cam = GradCAM(model=model, target_layers=target_layers, reshape_transform=reshape_transform) # Reshape transform for ViT
 target = None
 
 metrics = {
@@ -150,12 +151,12 @@ for imgs, info_batch in tqdm(dataloader, disable=False):
         sorted_scores = get_sorted_scores(image_scores)
         title = 'Pred: ' + str(sorted_scores[0][:4]) + '\nGT: ' + str(relevent_items)
         status_label = 'active' if info['homestead_status'] == 0 else 'inactive'
-        plt.imshow(img.permute(1, 2, 0))
+        # plt.imshow(img.permute(1, 2, 0))
         # plt.imshow(attn*category_mask, cmap='jet', alpha=0.7)
-        plt.title(title)
-        plt.xlabel(f'Status: {status_label} | mAP: {mAP}')
-        plt.savefig(f"test_imgs/{info['parcel_number']}.png")
-        plt.close()
+        # plt.title(title)
+        # plt.xlabel(f'Status: {status_label} | mAP: {mAP}')
+        # plt.savefig(f"test_imgs/{info['parcel_number']}.png")
+        # plt.close()
 
 # Average scores
 for key in global_scores: global_scores[key] /= total_images
