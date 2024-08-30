@@ -12,6 +12,40 @@ from tqdm import tqdm
 from PIL import Image
 from collections import OrderedDict
 
+def load_model(model_id, pretrained_model_checkpoint, finetuned_model_path=None, get_gradcam_layers=False):
+    model = timm.create_model(model_id, checkpoint_path=pretrained_model_checkpoint)
+
+    target_layers = []
+    if model_id == 'vgg16.tv_in1k':
+        model.head.fc = nn.Sequential(nn.Linear(4096, 1000), 
+                                    nn.ReLU(),
+                                    nn.Linear(1000, 2))
+    elif model_id == 'resnet50.a1_in1k':
+        model.fc = nn.Sequential(nn.Linear(2048, 1000), 
+                                nn.ReLU(),
+                                nn.Linear(1000, 2))
+        target_layers = [model.layer4[-1]]
+    elif model_id == 'vit_base_patch16_224':
+        model.head = nn.Linear(768, 2)
+        target_layers = [model.blocks[-1].norm1]
+    elif model_id == 'swin_large_patch4_window7_224.ms_in22k':
+        model.head.fc = nn.Linear(1536, 2)
+
+    if finetuned_model_path:
+        state_dict = torch.load(finetuned_model_path)
+        new_dict = OrderedDict()
+        for key in state_dict:
+            value = state_dict[key]
+            if 'module' in key:
+                key = key.replace('module.', '')
+
+            new_dict[key] = value
+
+        model.load_state_dict(new_dict)
+
+    if get_gradcam_layers: return model, target_layers
+    return model
+
 def plot_confusion_matrix(pred, labels, classes):
     cm = confusion_matrix(labels, pred)
 

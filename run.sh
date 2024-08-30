@@ -13,4 +13,4 @@ conda activate erie
 
 nvidia-smi
 
-python seg.py
+python analysis.py

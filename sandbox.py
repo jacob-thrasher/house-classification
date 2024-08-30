@@ -27,12 +27,23 @@ def get_data_from_AL_split(root, AL_path, AL_iter, k=200):
 
     return trimmed_df, valid_df
 
-root = '/users/jdt0025/scratch/Erie/CV_AL-entropy'
-for i in range(0, 5):
-    train = pd.read_csv(os.path.join(root, str(i), 'train.csv'))
-    test = pd.read_csv(os.path.join(root, str(i), 'test.csv'))
 
-    print(len(train), len(test))
+
+root = '/users/jdt0025/scratch/Erie/active_learning/active_learning'
+split = 'inactive'
+
+least = set(os.listdir(os.path.join(root, 'least', split)))
+margin = set(os.listdir(os.path.join(root, 'margin', split)))
+ratio = set(os.listdir(os.path.join(root, 'ratio', split)))
+entropy = set(os.listdir(os.path.join(root, 'entropy', split)))
+
+same = least.intersection(margin, ratio, entropy)
+
+for parcel in tqdm(same):
+    img = Image.open(os.path.join(root, 'least', split, parcel))
+    img.save(f'AL_misclass_intersection/{split}/{parcel}')
+
+
 
 
 # root = '/users/jdt0025/scratch/Erie'
